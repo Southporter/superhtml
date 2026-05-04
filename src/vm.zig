@@ -27,10 +27,7 @@ pub const Exception = error{
     OutIO,
 };
 
-pub fn VM(
-    comptime Context: type,
-    comptime Value: type,
-) type {
+pub fn VM(comptime Value: type) type {
     return struct {
         arena: std.mem.Allocator,
         content_name: []const u8,
@@ -40,7 +37,7 @@ pub fn VM(
         state: State,
         quota: usize = 100,
         templates: std.ArrayList(Template) = .empty,
-        ctx: *Context,
+        ctx: ScriptyVM.RootRef,
         scripty_vm: ScriptyVM = .{},
 
         // discovering templates state
@@ -49,7 +46,7 @@ pub fn VM(
             idx: usize,
         }) = .{},
 
-        const ScriptyVM = scripty.VM(Context, Value);
+        const ScriptyVM = scripty.VM(Value);
         const Self = @This();
 
         pub const Template = SuperTemplate(ScriptyVM);
@@ -79,7 +76,7 @@ pub fn VM(
 
         pub fn init(
             arena: std.mem.Allocator,
-            context: *Context,
+            context: ScriptyVM.RootRef,
             layout_name: []const u8,
             layout_path: []const u8,
             layout_src: []const u8,

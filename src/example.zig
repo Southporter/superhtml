@@ -4,15 +4,17 @@ const Allocator = std.mem.Allocator;
 const scripty = @import("scripty");
 const superhtml = @import("root.zig"); // In your case this would be @import("superhtml")
 
-/// A SuperHTML VM is created by giving it the Context and Value types that
-/// make up the Scripty evaluation context. See `src/example.zig` in
-/// https://github.com/kristoff-it/scripty for more details on how that
-/// works.
+/// A SuperHTML VM is created by giving it a Value union that defines
+/// the Scripty evaluation context that is made available to SuperHTML
+/// templates.
+///
+/// See https://github.com/kristoff-it/scripty for more details on how
+/// to define a Scripty evaluation context.
 ///
 /// Note that your Scripty values must have some definitions that are
 /// required by SuperHTML, such as Optional (used by ':if') and Iterator
 /// (used by ':loop').
-const ExampleVM = superhtml.VM(ExampleContext, ExampleValue);
+const ExampleVM = superhtml.VM(Value);
 
 test ExampleVM {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -20,7 +22,7 @@ test ExampleVM {
 
     const arena = arena_state.allocator();
 
-    var ctx: ExampleContext = .{
+    var ctx: Root = .{
         .version = "v0",
         .page = .{
             .title = "Home",
@@ -34,7 +36,10 @@ test ExampleVM {
     };
 
     const layout_src =
-        \\<a href="$site.link()" :text="$site.name"></a>
+        \\<ctx foo="$version">
+        \\  <a href="$site.link()" :text="$site.name"></a>
+        \\  <span :text="$ctx.foo"></span>
+        \\</ctx>
     ;
 
     const layout_html_ast: superhtml.html.Ast = try .init(arena, layout_src, .superhtml, false);
@@ -76,20 +81,23 @@ test ExampleVM {
 
     try std.testing.expectEqualStrings("", err_writer.written());
     try std.testing.expectEqualStrings(
-        \\<a href="https://example.com">Example Website</a>
+        \\
+        \\  <a href="https://example.com">Example Website</a>
+        \\  <span>v0</span>
+        \\
     , out_writer.written());
 }
 
-const ExampleContext = struct {
+const Root = struct {
     version: []const u8,
     page: Page,
     site: Site,
     _force_https: bool,
 
     // Globals specific to SuperHTML
-    ctx: superhtml.utils.Ctx(ExampleValue) = .{},
-    loop: ?*ExampleValue.Iterator = null,
-    @"if": ?*const ExampleValue.Optional = null,
+    ctx: superhtml.utils.Ctx(Value) = .{},
+    loop: ?*Value.Iterator = null,
+    @"if": ?*const Value.Optional = null,
 
     pub const Dot = true;
     pub const PassByRef = true;
@@ -107,10 +115,10 @@ const ExampleContext = struct {
                 pub fn call(
                     site: *const Site,
                     gpa: Allocator,
-                    ctx: *const ExampleContext,
-                    args: []const ExampleValue,
-                ) !ExampleValue {
-                    const bad_arg: ExampleValue = .{ .err = "expected 0 arguments" };
+                    ctx: *const Root,
+                    args: []const Value,
+                ) !Value {
+                    const bad_arg: Value = .{ .err = "expected 0 arguments" };
                     if (args.len != 0) return bad_arg;
 
                     return .{
@@ -136,10 +144,10 @@ const ExampleContext = struct {
     };
 };
 
-pub const ExampleValue = union(Tag) {
-    global: *const ExampleContext,
-    site: *const ExampleContext.Site,
-    page: *const ExampleContext.Page,
+pub const Value = union(enum) {
+    root: *Root,
+    site: *const Root.Site,
+    page: *const Root.Page,
     string: String,
     bool: Bool,
     int: Int,
@@ -148,7 +156,8 @@ pub const ExampleValue = union(Tag) {
     nil,
 
     // Definitions required by SuperHTML
-    ctx: superhtml.utils.Ctx(ExampleValue),
+
+    ctx: superhtml.utils.Ctx(Value),
     optional: ?*const Optional, // used by :if
     iterator: *Iterator, // used by :loop
     array: Array,
@@ -173,54 +182,39 @@ pub const ExampleValue = union(Tag) {
 
     pub const Bool = struct {
         value: bool,
-
         pub const PassByRef = false;
         pub const Builtins = struct {};
     };
 
-    pub const Tag = enum {
-        global,
-        site,
-        page,
-        string,
-        bool,
-        int,
-        float,
-        err,
-        nil,
-
-        ctx,
-        optional,
-        iterator,
-        array,
-    };
-
-    pub const call = scripty.defaultCall(ExampleValue, ExampleContext);
-
-    pub fn fromStringLiteral(bytes: []const u8) ExampleValue {
+    pub fn fromStringLiteral(bytes: []const u8) Value {
         return .{ .string = .{ .value = bytes } };
     }
 
-    pub fn fromNumberLiteral(bytes: []const u8) ExampleValue {
+    pub fn fromIntegerLiteral(bytes: []const u8) Value {
         _ = bytes;
         return .{ .int = .{ .value = 0 } };
     }
 
-    pub fn fromBooleanLiteral(b: bool) ExampleValue {
+    pub fn fromFloatLiteral(bytes: []const u8) Value {
+        _ = bytes;
+        return .{ .float = .{ .value = 0 } };
+    }
+
+    pub fn fromBooleanLiteral(b: bool) Value {
         return .{ .bool = .{ .value = b } };
     }
 
-    pub fn from(gpa: std.mem.Allocator, value: anytype) !ExampleValue {
+    pub fn from(gpa: std.mem.Allocator, value: anytype) !Value {
         _ = gpa;
         const T = @TypeOf(value);
         switch (T) {
-            *ExampleContext, *const ExampleContext => return .{ .global = value },
-            ExampleValue => return value,
-            *const ExampleContext.Site => return .{ .site = value },
-            *const ExampleContext.Page => return .{ .page = value },
-            ?*const ExampleValue.Optional => return if (value) |v| .{ .optional = v } else .nil,
-            ?*ExampleValue.Iterator => return if (value) |v| .{ .iterator = v } else .nil,
-            superhtml.utils.Ctx(ExampleValue) => return .{ .ctx = value },
+            *Root => return .{ .root = value },
+            Value => return value,
+            *Root.Site => return .{ .site = value },
+            *Root.Page => return .{ .page = value },
+            ?*const Value.Optional => return if (value) |v| .{ .optional = v } else .nil,
+            ?*Value.Iterator => return if (value) |v| .{ .iterator = v } else .nil,
+            superhtml.utils.Ctx(Value) => return .{ .ctx = value },
             []const u8 => return .{ .string = .{ .value = value } },
             usize => return .{ .int = .{ .value = @intCast(value) } },
             bool => return .{ .bool = .{ .value = value } },
@@ -228,7 +222,7 @@ pub const ExampleValue = union(Tag) {
         }
     }
 
-    pub fn renderForError(value: ExampleValue, arena: Allocator, w: *Io.Writer) !void {
+    pub fn renderForError(value: Value, arena: Allocator, w: *Io.Writer) !void {
         _ = arena;
         switch (value) {
             else => w.print("{any}", .{value}) catch return error.ErrIO,
@@ -236,24 +230,24 @@ pub const ExampleValue = union(Tag) {
     }
 
     pub const Optional = struct {
-        value: ExampleValue,
+        value: Value,
 
         pub const PassByRef = false;
         pub const Builtins = struct {};
     };
 
     pub const Iterator = struct {
-        it: ExampleValue = undefined,
+        it: Value = undefined,
         idx: usize = 0,
         first: bool = undefined,
         last: bool = undefined,
         len: usize,
 
-        _superhtml_context: superhtml.utils.IteratorContext(ExampleValue, ExampleContext) = .{},
+        _superhtml_context: superhtml.utils.IteratorContext(Value) = .{},
         _impl: Impl,
 
         pub const Impl = union(enum) {
-            value_it: SliceIterator(ExampleValue),
+            value_it: SliceIterator(Value),
 
             pub fn len(impl: Impl) usize {
                 switch (impl) {
@@ -276,7 +270,7 @@ pub const ExampleValue = union(Tag) {
             switch (iter._impl) {
                 inline else => |*v| {
                     const item = try v.next(gpa);
-                    iter.it = try ExampleValue.from(gpa, item orelse return false);
+                    iter.it = try Value.from(gpa, item orelse return false);
                     iter.idx += 1;
                     iter.first = iter.idx == 1;
                     iter.last = iter.idx == iter.len;
@@ -296,10 +290,10 @@ pub const ExampleValue = union(Tag) {
                 pub fn call(
                     it: *Iterator,
                     _: Allocator,
-                    _: *const ExampleContext,
-                    args: []const ExampleValue,
-                ) !ExampleValue {
-                    const bad_arg: ExampleValue = .{ .err = "expected 0 arguments" };
+                    _: *const Root,
+                    args: []const Value,
+                ) !Value {
+                    const bad_arg: Value = .{ .err = "expected 0 arguments" };
                     if (args.len != 0) return bad_arg;
                     return it._superhtml_context.up();
                 }
@@ -328,17 +322,17 @@ pub const ExampleValue = union(Tag) {
     pub const Array = struct {
         len: usize,
         empty: bool,
-        _items: []const ExampleValue,
+        _items: []const Value,
 
         pub const Builtins = struct {
             pub const at = struct {
                 pub fn call(
                     arr: Array,
                     _: Allocator,
-                    _: *const ExampleContext,
-                    args: []const ExampleValue,
-                ) !ExampleValue {
-                    const bad_arg: ExampleValue = .{ .err = "expected 1 integer argument" };
+                    _: *const Root,
+                    args: []const Value,
+                ) !Value {
+                    const bad_arg: Value = .{ .err = "expected 1 integer argument" };
                     if (args.len != 1) return bad_arg;
 
                     const idx = switch (args[0]) {

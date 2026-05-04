@@ -31,7 +31,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
 
         const Template = @This();
         const Value = ScriptyVM.Value;
-        const Context = ScriptyVM.Context;
+        const RootRef = ScriptyVM.RootRef;
         const Role = enum { layout, template };
 
         const IfFrame = struct {
@@ -143,7 +143,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
         pub fn activateBlock(
             tpl: *Template,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             super_id: []const u8,
             writer: *Writer,
             err_writer: *Writer,
@@ -245,7 +245,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
         pub fn eval(
             tpl: *Template,
             scripty_vm: *ScriptyVM,
-            scripty_ctx: *Context,
+            scripty_ctx: RootRef,
             writer: *Writer,
             err_writer: *Writer,
         ) errors.FatalShowOOM!Continuation {
@@ -925,7 +925,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             tpl: *Template,
             err_writer: *Writer,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             script_attr_name: Span,
             code_span: Span,
         ) errors.Fatal!Value {
@@ -979,7 +979,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             tpl: *Template,
             err_writer: *Writer,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             script_attr_name: Span,
             code_span: Span,
         ) errors.Fatal!Value {
@@ -1031,7 +1031,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             tpl: *Template,
             err_writer: *Writer,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             script_attr_name: Span,
             code_span: Span,
         ) errors.Fatal!ScriptyVM.Result {
@@ -1080,7 +1080,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             tpl: *Template,
             err_writer: *Writer,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             script_attr_name: Span,
             code_span: Span,
         ) errors.Fatal!Value {
@@ -1133,7 +1133,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             tpl: *Template,
             err_writer: *Writer,
             script_vm: *ScriptyVM,
-            script_ctx: *Context,
+            script_ctx: RootRef,
             script_attr_name: Span,
             code_span: Span,
         ) errors.Fatal!*Value.Iterator {
@@ -1232,7 +1232,7 @@ pub fn SuperTemplate(comptime ScriptyVM: type) type {
             }
         }
 
-        pub fn setContext(tpl: Template, script_ctx: *Context) void {
+        pub fn setContext(tpl: Template, script_ctx: RootRef) void {
             script_ctx.loop = if (tpl.loop_stack.getLastOrNull()) |last|
                 last.iterator
             else
