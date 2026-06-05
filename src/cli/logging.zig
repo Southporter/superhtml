@@ -54,7 +54,7 @@ pub fn setup(io: Io, gpa: Allocator, environ: *std.process.Environ.Map) void {
 }
 
 fn setupInternal(io: Io, gpa: Allocator, environ: *std.process.Environ.Map) !void {
-    var cache_base = try folders.open(io, gpa, environ.*, .cache, .{}) orelse return error.Failure;
+    var cache_base = try folders.open(io, gpa, environ, .cache, .{}) orelse return error.Failure;
     errdefer cache_base.close(io);
 
     const log_path = "superhtml.log";
