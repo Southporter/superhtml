@@ -169,7 +169,7 @@ pub fn @"textDocument/didOpen"(
         else => |tag| @tagName(tag),
         .custom_value => |cv| cv,
     }) orelse {
-        log.err("unrecognized language id: '{s}'", .{language_id});
+        log.err("unrecognized language id: '{t}'", .{language_id});
         try self.windowNotification(
             .Error,
             "Unrecognized languageId, expected are: html, superhtml, xml",

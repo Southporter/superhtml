@@ -2,6 +2,27 @@
 
 All notable changes to the SuperHTML extension will be documented in this file.
 
+## [v0.7.0]
+- Added support for `[role]` and `[aria-*]` attributes (thanks bitterlox!) which
+  includes also autocomplete support for the language server.
+- Greatly improved JS formatting: JS code has now a proper tokenizer that
+  avoids the previous issues with formatting code that makes non-trivial
+  use of curly braces (thanks Jeffrey Crochet!).
+- Relaxed rules for `<iframe [allow]>`: apparently nobody on the internet
+  respects the grammar for values of this attribute (eg. when you copy
+  embed code from youtube, it gives you completely wrong code), and since
+  that grammar is a spec external to the HTML spec, I've made checking more
+  lenient because it would otherwise be too hard for users to figure out
+  the right syntax.
+- Fix `<svg>`, `<math>`, `<ins>`, `<del>` categorization (previously you
+  would get false positive nesting errors).
+- Fixed incorrect analysis of comments inside of `<details>` elements which
+  could cause false positive errors for a `<summary>` child.
+- Fixed some minor bugs relative to the obsolete `<script>` double escape
+  state. This should have no impact on anybody as it's a legacy feature.
+- Fixed a rendering bug where formatting a file multiple times in a row
+  could cause it to end up with 2 newlines at the bottom (instead of 1).
+
 ## [v0.6.2]
 - The "boolean attributes cannot have a value" error now puts squigglies under the attribute name instead of the value.
 - Improved validation for `<link>` `[crossorigin]`, it previously used its own implementation of CORS validation, while now it uses one central implementation shared by all other similar attributes.
