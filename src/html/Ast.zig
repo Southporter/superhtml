@@ -720,6 +720,7 @@ pub fn init(
                     }
 
                     if (std.ascii.eqlIgnoreCase("script", name)) {
+                        log.debug("entering script data state", .{});
                         tokenizer.gotoScriptData();
                     } else if (rawtext_names.has(name)) {
                         tokenizer.gotoRawText(name);
@@ -1146,7 +1147,12 @@ pub fn render(ast: Ast, src: []const u8, w: *Writer) !void {
                             try w.writeAll(txt);
                             break :blk;
                         }
-                        var it = std.mem.splitScalar(u8, txt, '\n');
+                        const trimmed_txt = std.mem.trim(
+                            u8,
+                            txt,
+                            &std.ascii.whitespace,
+                        );
+                        var it = std.mem.splitScalar(u8, trimmed_txt, '\n');
                         var first = true;
                         var empty_line = false;
                         while (it.next()) |raw_line| {
@@ -1158,7 +1164,8 @@ pub fn render(ast: Ast, src: []const u8, w: *Writer) !void {
                             if (line.len == 0) {
                                 if (empty_line) continue;
                                 empty_line = true;
-                                if (!first) for (0..indentation) |_| try w.print("\t", .{});
+                                assert(!first);
+                                for (0..indentation) |_| try w.print("\t", .{});
                                 try w.print("\n", .{});
                                 continue;
                             } else empty_line = false;
@@ -1320,7 +1327,12 @@ pub fn render(ast: Ast, src: []const u8, w: *Writer) !void {
                 defer zone.end();
                 std.debug.assert(direction == .enter);
 
-                try w.writeAll(current.open.slice(src));
+                try w.writeAll(std.mem.trim(
+                    u8,
+                    current.open.slice(src),
+                    &std.ascii.whitespace,
+                ));
+
                 last_rbracket = current.open.end;
 
                 if (current.next_idx != 0) {
@@ -1909,9 +1921,6 @@ test "tight tags inner indentation" {
 }
 
 test "bad html" {
-    // TODO: handle ast.errors.len != 0
-    if (true) return error.SkipZigTest;
-
     const case =
         \\<html>
         \\<body>
@@ -1921,8 +1930,7 @@ test "bad html" {
     ;
     const ast = try Ast.init(std.testing.allocator, case, .html, false);
     defer ast.deinit(std.testing.allocator);
-
-    try std.testing.expectFmt(case, "{f}", .{ast.formatter(case)});
+    try std.testing.expect(0 != ast.errors.len);
 }
 
 test "formatting - simple" {
@@ -2540,4 +2548,3 @@ test "script formatting - single-line while loop" {
 //         .out = &out.interface,
 //     }, Context.testOne, .{});
 // }
-

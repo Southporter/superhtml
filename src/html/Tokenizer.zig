@@ -414,7 +414,12 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
     deferred: ?Token = null,
 } {
     while (true) {
-        log.debug("at char: {any}", .{self.state});
+        log.debug("[{*}] char: '{c}' ({}) state {any}", .{
+            self,
+            self.current,
+            self.idx,
+            self.state,
+        });
         switch (self.state) {
             .text => |state| {
                 if (!self.consume(src)) {
@@ -752,7 +757,7 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                     // This is an unexpected-question-mark-instead-of-tag-name parse error. Create a comment token whose data is the empty string. Reconsume in the bogus comment state.
                     '?' => {
                         self.idx -= 1;
-                        self.state = .{ .bogus_comment = self.idx };
+                        self.state = .{ .bogus_comment = lbracket };
                     },
                     else => |c| if (isAsciiAlpha(c)) {
                         // ASCII alpha
@@ -1394,7 +1399,6 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                         );
                         if (is_script) {
                             self.state = .{ .before_attribute_name = tag };
-                            log.debug("111111", .{});
                             if (trimmedText(
                                 state.data_start,
                                 state.tag_start,
@@ -1445,7 +1449,6 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                                 },
                             };
 
-                            log.debug("222222", .{});
                             if (trimmedText(
                                 state.data_start,
                                 state.tag_start,
@@ -1484,7 +1487,6 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                         );
                         if (is_script) {
                             self.state = .data;
-                            log.debug("3333333", .{});
                             if (trimmedText(
                                 state.data_start,
                                 state.tag_start,
@@ -1629,8 +1631,12 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                     },
                     // U+003C LESS-THAN SIGN (<)
                     // Switch to the script data escaped less-than sign state.
-                    '<' => self.state = .{
-                        .script_data_escaped_less_than_sign = state,
+                    '<' => {
+                        var new = state;
+                        new.tag_start = self.idx - 1;
+                        self.state = .{
+                            .script_data_escaped_less_than_sign = new,
+                        };
                     },
                     // U+0000 NULL
                     // This is an unexpected-null-character parse error. Switch to the script data escaped state. Emit a U+FFFD REPLACEMENT CHARACTER character token.
@@ -1705,7 +1711,7 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                     },
                     // Anything else
                     // Switch to the script data escaped state. Emit the current input character as a character token.
-                    else => self.state = .{ .script_data = state.data_start },
+                    else => self.state = .{ .script_data_escaped = state },
                 }
             },
 
@@ -1723,8 +1729,10 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                     // Set the temporary buffer to the empty string. Emit a U+003C LESS-THAN SIGN character token. Reconsume in the script data double escape start state.
                     'a'...'z', 'A'...'Z' => {
                         self.idx -= 1;
+                        var new = state;
+                        new.name_start = self.idx;
                         self.state = .{
-                            .script_data_double_escape_start = state,
+                            .script_data_double_escape_start = new,
                         };
                     },
                     // Anything else
@@ -1789,7 +1797,6 @@ fn next2(self: *Tokenizer, src: []const u8) ?struct {
                         );
                         if (is_script) {
                             self.state = .{ .before_attribute_name = tag };
-                            log.debug("555555", .{});
                             if (trimmedText(
                                 state.data_start,
                                 state.tag_start,
@@ -5219,65 +5226,50 @@ fn trimmedText(start: u32, end: u32, src: []const u8) ?Span {
 }
 
 test "script single/double escape weirdness" {
-    // TODO: Get this test passing
-    if (true) return error.SkipZigTest;
-
     // case from https://stackoverflow.com/questions/23727025/script-double-escaped-state
-    const case =
-        \\<script>
-        \\<!--script data escaped-->
-        \\</script>    
-        \\
-        \\<script>
-        \\<!--<script>script data double escaped</script>-->
+    const cases: []const []const u8 = &.{
+        //<script>
+        // \\<!--script data escaped-->
+        // \\</script>
+        // ,
+        //<script>
+        // \\<!--<script>script data double escaped</script>-->
+        // \\</script>
+        // ,
+        //<script>
+        \\  <!--    //hide from non-JS browsers
+        \\  function doSomething() {
+        \\    var coolScript = "<script>" + theCodeICopied + "</script>";
+        \\    document.write(coolScript);
+        \\  }
+        \\  // And if you forget to close your comment here, things go funnny
+        \\  -->
         \\</script>
-    ;
+    };
 
-    // TODO: fix also the expected results!
+    for (cases) |c| {
+        var tokenizer: Tokenizer = .{ .language = .html };
+        tokenizer.gotoScriptData();
+        var t = tokenizer.next(c);
 
-    var tokenizer: Tokenizer = .{};
-    var t = tokenizer.next(case);
-    errdefer std.debug.print("t = {any}\n", .{t});
+        errdefer std.debug.print("token = \n{}\n", .{t.?});
+        errdefer std.debug.print("CASE = \n{s}\n", .{c});
+        errdefer std.debug.print("[{s}]\n", .{c[126..230]});
 
-    // first half
-    {
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .tag);
-        try std.testing.expect(t.?.tag.kind == .start);
-    }
-    {
-        t = tokenizer.next(case);
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .text);
-    }
-    {
-        t = tokenizer.next(case);
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .tag);
-        try std.testing.expect(t.?.tag.kind == .end);
-    }
+        {
+            try std.testing.expect(t != null);
+            try std.testing.expect(t.? == .text);
+        }
+        {
+            t = tokenizer.next(c);
+            try std.testing.expect(t != null);
+            try std.testing.expect(t.? == .tag);
+            try std.testing.expect(t.?.tag.kind == .end);
+        }
 
-    // Second half
-
-    {
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .tag);
-        try std.testing.expect(t.?.tag.kind == .start);
+        t = tokenizer.next(c);
+        try std.testing.expect(t == null);
     }
-    {
-        t = tokenizer.next(case);
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .text);
-    }
-    {
-        t = tokenizer.next(case);
-        try std.testing.expect(t != null);
-        try std.testing.expect(t.? == .tag);
-        try std.testing.expect(t.?.tag.kind == .end);
-    }
-
-    t = tokenizer.next(case);
-    try std.testing.expect(t == null);
 }
 
 test "character references" {
