@@ -13,7 +13,7 @@ pub const svg: Element = .{
     .meta = .{
         .categories_superset = .{
             .flow = true,
-            .phrasing =true,
+            .phrasing = true,
         },
     },
     .attributes = .manual, // we just don't do it

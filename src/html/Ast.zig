@@ -758,7 +758,7 @@ pub fn init(
                     const name = tag.name.slice(src);
                     const end_kind = if (svg_lvl == 1 and std.ascii.eqlIgnoreCase(name, "svg"))
                         .svg
-                    else if (math_lvl == 1 and std.ascii.eqlIgnoreCase(name, "math"))
+                    else if (svg_lvl == 0 and math_lvl == 1 and std.ascii.eqlIgnoreCase(name, "math"))
                         .math
                     else if (svg_lvl != 0 or math_lvl != 0) .___ else switch (language) {
                         .superhtml => if (std.ascii.eqlIgnoreCase("ctx", name))
@@ -825,11 +825,9 @@ pub fn init(
                         if (same_name) {
                             if (std.ascii.eqlIgnoreCase(current_name, "svg")) {
                                 svg_lvl -= 1;
-                            }
-                            if (std.ascii.eqlIgnoreCase(current_name, "math")) {
+                            } else if (std.ascii.eqlIgnoreCase(current_name, "math")) {
                                 math_lvl -= 1;
-                            }
-                            if (current.kind == .template) {
+                            } else if (current.kind == .template) {
                                 var map = seen_ids_stack.pop().?;
                                 map.deinit(gpa);
                             }
